@@ -4,10 +4,10 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
 
   use GenServer
 
-  def start_azure_management(),
+  def start_azure_management(tenant_id \\ "common"),
     do:
       %{
-        tenant_id: "common",
+        tenant_id: tenant_id,
         resource: "https://management.core.windows.net/",
         azure_environment: :azure_global
       }
