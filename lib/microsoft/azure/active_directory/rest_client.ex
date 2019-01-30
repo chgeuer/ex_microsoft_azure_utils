@@ -157,8 +157,11 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
     end
   end
 
-  def get_device_code(tenant_id, resource, azure_environment)
-      when is_atom(azure_environment) do
+  def get_device_code(%DeviceAuthenticator.State{
+        tenant_id: tenant_id,
+        resource: resource,
+        azure_environment: azure_environment
+      }) do
     response =
       %{}
       |> Map.put_new(:method, :post)
@@ -211,7 +214,11 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
     end
   end
 
-  def refresh_token(resource, refresh_token, azure_environment) when is_atom(azure_environment) do
+  def refresh_token(%DeviceAuthenticator.State{
+        resource: resource,
+        azure_environment: azure_environment,
+        token_response: %{refresh_token: refresh_token}
+      }) do
     response =
       %{}
       |> Map.put_new(:method, :post)
