@@ -49,7 +49,7 @@ defmodule Microsoft.Azure.AzureEnvironment do
     %__MODULE__{
       name: "AzurePublicCloud",
       management_portal_url: "manage.windowsazure.com",
-      publish_settings_url: "https://manage.windowsazure.com&publishsettings/index",
+      publish_settings_url: "https://manage.windowsazure.com/publishsettings/index",
       service_management_endpoint: "management.core.windows.net",
       resource_manager_endpoint: "management.azure.com",
       active_directory_endpoint: "login.microsoftonline.com",

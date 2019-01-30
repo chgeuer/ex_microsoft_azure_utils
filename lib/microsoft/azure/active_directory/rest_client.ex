@@ -1,5 +1,7 @@
 defmodule Microsoft.Azure.ActiveDirectory.RestClient do
   alias Microsoft.Azure.AzureEnvironment
+  alias Microsoft.Azure.ActiveDirectory.DeviceAuthenticator
+  alias Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.DeviceAuthenticatorError
   alias Microsoft.Azure.ActiveDirectory.Model.{DeviceCodeResponse, TokenResponse}
 
   use Tesla
@@ -105,8 +107,11 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
       |> perform_request()
 
     case response do
-      %{status: status} when 400 <= status and status < 500 -> {:error, response.body}
-      %{status: 200} -> {:ok, response.body |> TokenResponse.new()}
+      %{status: 200} ->
+        {:ok, response.body |> TokenResponse.from_json()}
+
+      %{status: status} when 400 <= status and status < 500 ->
+        {:error, response.body |> DeviceAuthenticatorError.from_json()}
     end
   end
 
@@ -124,8 +129,11 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
       |> perform_request()
 
     case response do
-      %{status: status} when 400 <= status and status < 500 -> {:error, response.body}
-      %{status: 200} -> {:ok, response.body |> Poison.decode!()}
+      %{status: 200} ->
+        {:ok, response.body |> Poison.decode!(keys: :atoms)}
+
+      %{status: status} when 400 <= status and status < 500 ->
+        {:error, response.body |> DeviceAuthenticatorError.from_json()}
     end
   end
 
@@ -141,11 +149,11 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
       |> perform_request()
 
     case response do
-      %{status: status} when 400 <= status and status < 500 ->
-        {:error, response.body}
-
       %{status: 200} ->
         {:ok, response.body |> Poison.decode!() |> Map.get("keys") |> Enum.map(&JOSE.JWK.from/1)}
+
+      %{status: status} when 400 <= status and status < 500 ->
+        {:error, response.body |> DeviceAuthenticatorError.from_json()}
     end
   end
 
@@ -166,13 +174,19 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
       |> perform_request()
 
     case response do
-      %{status: status} when 400 <= status and status < 500 -> {:error, response.body}
-      %{status: 200} -> {:ok, response.body |> DeviceCodeResponse.new()}
+      %{status: 200} ->
+        {:ok, response.body |> DeviceCodeResponse.from_json()}
+
+      %{status: status} when 400 <= status and status < 500 ->
+        {:error, response.body |> DeviceAuthenticatorError.from_json()}
     end
   end
 
-  def fetch_device_code_token(resource, code, azure_environment)
-      when is_binary(resource) and is_binary(code) and is_atom(azure_environment) do
+  def fetch_device_code_token(%DeviceAuthenticator.State{
+        resource: resource,
+        azure_environment: azure_environment,
+        device_code_response: %DeviceCodeResponse{device_code: device_code}
+      }) do
     response =
       %{}
       |> Map.put_new(:method, :post)
@@ -182,18 +196,18 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
         path: "/common/oauth2/token"
       )
       |> add_param(:form, "resource", resource)
-      |> add_param(:form, "code", code)
+      |> add_param(:form, "code", device_code)
       |> add_param(:form, "grant_type", "device_code")
       |> add_param(:form, "client_id", @az_cli_clientid)
       |> Enum.into([])
       |> perform_request()
 
     case response do
-      %{status: status} when 400 <= status and status < 500 ->
-        {:error, response.body |> Poison.decode!()}
-
       %{status: 200} ->
-        {:ok, response.body |> TokenResponse.new()}
+        {:ok, response.body |> TokenResponse.from_json()}
+
+      %{status: status} when 400 <= status and status < 500 ->
+        {:error, response.body |> DeviceAuthenticatorError.from_json()}
     end
   end
 
@@ -214,11 +228,11 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
       |> perform_request()
 
     case response do
-      %{status: status} when 400 <= status and status < 500 ->
-        {:error, response.body |> Poison.decode!()}
-
       %{status: 200} ->
-        {:ok, response.body |> TokenResponse.new()}
+        {:ok, response.body |> TokenResponse.from_json()}
+
+      %{status: status} when 400 <= status and status < 500 ->
+        {:error, response.body |> DeviceAuthenticatorError.from_json()}
     end
   end
 end

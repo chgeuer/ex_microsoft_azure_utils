@@ -37,8 +37,6 @@ defmodule MicrosoftAzureMgmtClient do
   end
 
   def proxy_middleware() do
-    IO.puts("proxy_mio")
-
     case System.get_env("http_proxy") do
       nil ->
         nil
@@ -47,15 +45,13 @@ defmodule MicrosoftAzureMgmtClient do
         nil
 
       proxy_cfg ->
-        proxy_cfg
-        |> String.split(":")
-        |> (fn [host, port] ->
-              {Tesla.Middleware.Opts,
-               [
-                 proxy_host: host |> String.to_charlist(),
-                 proxy_port: port |> Integer.parse() |> elem(0)
-               ]}
-            end).()
+        [host, port] = proxy_cfg |> String.split(":")
+
+        {Tesla.Middleware.Opts,
+         [
+           proxy_host: host |> String.to_charlist(),
+           proxy_port: port |> Integer.parse() |> elem(0)
+         ]}
     end
   end
 end

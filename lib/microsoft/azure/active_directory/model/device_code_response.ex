@@ -1,4 +1,10 @@
 defmodule Microsoft.Azure.ActiveDirectory.Model.DeviceCodeResponse do
+  #
+  # Response from /tenant.onmicrosoft.com/oauth2/devicecode
+  #
+
+  @derive {Inspect, except: [:device_code]}
+
   defstruct [
     :user_code,
     :device_code,
@@ -8,7 +14,7 @@ defmodule Microsoft.Azure.ActiveDirectory.Model.DeviceCodeResponse do
     :message
   ]
 
-  def new(json) do
+  def from_json(json) do
     json
     |> Poison.decode!(as: %__MODULE__{})
     |> Map.update!(:expires_in, &String.to_integer/1)

@@ -1,4 +1,6 @@
 defmodule Microsoft.Azure.ActiveDirectory.Model.TokenResponse do
+  @derive {Inspect, except: [:access_token, :refresh_token, :id_token]}
+
   defstruct [
     :access_token,
     :refresh_token,
@@ -9,10 +11,11 @@ defmodule Microsoft.Azure.ActiveDirectory.Model.TokenResponse do
     :not_before,
     :resource,
     :token_type,
-    :scope
+    :scope,
+    :foci
   ]
 
-  def new(json) do
+  def from_json(json) do
     json
     |> Poison.decode!(as: %__MODULE__{})
     |> Map.update!(:not_before, &(&1 |> String.to_integer() |> DateTime.from_unix!()))
