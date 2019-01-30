@@ -125,8 +125,10 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
     end
   end
 
-  def handle_info(:refresh_token, state = %State{}), do: state |> refresh()
-  def handle_cast(:refresh_token, state = %State{}), do: state |> refresh()
+  def handle_info(:refresh_token, state = %State{stage: :refreshing}), do: state |> refresh()
+  def handle_info(:refresh_token, state = %State{stage: _}), do: {:noreply, state }
+  def handle_cast(:refresh_token, state = %State{stage: :refreshing}), do: state |> refresh()
+  def handle_cast(:refresh_token, state = %State{stage: _}), do: {:noreply, state }
 
   defp refresh(state = %State{}) do
     IO.puts("Refreshing token")
