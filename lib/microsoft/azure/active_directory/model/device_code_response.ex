@@ -16,7 +16,8 @@ defmodule Microsoft.Azure.ActiveDirectory.Model.DeviceCodeResponse do
     :expires_on
   ]
 
-  def expires_in(%__MODULE__{expires_on: expires_on}), do: expires_on |> Timex.diff(Timex.now(), :seconds)
+  def expires_in(%__MODULE__{expires_on: expires_on}),
+    do: expires_on |> Timex.diff(Timex.now(), :seconds)
 
   def from_json(json) do
     json
