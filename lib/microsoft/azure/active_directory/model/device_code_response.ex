@@ -11,8 +11,12 @@ defmodule Microsoft.Azure.ActiveDirectory.Model.DeviceCodeResponse do
     :verification_url,
     :expires_in,
     :interval,
-    :message
+    :message,
+    # custom field from me
+    :expires_on
   ]
+
+  def expires_in(%__MODULE__{expires_on: expires_on}), do: expires_on |> Timex.diff(Timex.now(), :seconds)
 
   def from_json(json) do
     json

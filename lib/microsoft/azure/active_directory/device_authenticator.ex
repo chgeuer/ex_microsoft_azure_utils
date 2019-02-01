@@ -64,27 +64,35 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   # Server section
   #
 
+  @impl GenServer
   def init(state = %State{}) do
     {:ok, state |> Map.put(:stage, :initialized)}
   end
 
+  @impl GenServer
   def handle_call(:get_stage, _, state = %State{stage: stage}), do: {:reply, stage, state}
 
   def handle_call(:get_device_code, _, state = %State{stage: :initialized}) do
     #
     # Make the initial call to trigger device authentication
-    #
+
     case RestClient.get_device_code(state) do
-      {:ok, device_code_response = %DeviceCodeResponse{}} ->
+      {:ok, device_code_response = %DeviceCodeResponse{expires_in: expires_in}} ->
+        # remember when the code authN code expires
+        expires_on = Timex.now() |> Timex.add(Timex.Duration.from_seconds(expires_in))
+
         new_state =
           state
           |> Map.put(:stage, :polling)
-          |> Map.put(:device_code_response, device_code_response)
+          |> Map.put(
+            :device_code_response,
+            device_code_response |> Map.put(:expires_on, expires_on)
+          )
 
         self()
         |> Process.send_after(:poll_for_token, 1000 * new_state.device_code_response.interval)
 
-        {:reply, {:ok, device_code_response}, new_state}
+        {:reply, {:ok, new_state.device_code_response}, new_state}
 
       {:error, body} ->
         {:reply, {:error, body}, state}
@@ -94,12 +102,18 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   def handle_call(
         :get_device_code,
         _sender,
-        state = %State{stage: :polling, device_code_response: device_code_response}
-      ) do
+        state = %State{stage: :polling, device_code_response: device_code_response = %{expires_on: expires_on}}
+      ) when expires_on != :nil do
     #
     # As long as we're polling for the user signin, return the old device code's response
     #
-    {:reply, {:ok, device_code_response}, state}
+    seconds_left = device_code_response |> DeviceCodeResponse.expires_in()
+    cond do
+      seconds_left > 0 -> {:reply, {:ok, device_code_response}, state}
+
+      # Process should exit if the current device code is expired
+      :true -> {:stop, :normal, {:error, :cannot_use_expired_code_request }, state }
+    end
   end
 
   def handle_call(:get_device_code, _, state = %State{stage: :refreshing}),
@@ -118,21 +132,29 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
       ),
       do: {:reply, {:ok, token_response}, state}
 
-  def handle_info(:poll_for_token, state = %State{}), do: {:noreply, state |> fetch_token_impl()}
+  @impl GenServer
+  def handle_info(:poll_for_token, state = %State{}) do
+    seconds_left = device_code_response |> DeviceCodeResponse.expires_in()
+    cond do
+      seconds_left > 0 -> {:noreply, state |> fetch_token_impl()}
+      :true -> {:stop, :normal, state } # Process should exit if the current device code is expired
+    end
+  end
 
   def handle_info(:refresh_token, state = %State{stage: :refreshing}),
     do: {:noreply, state |> refresh_token_impl()}
 
   def handle_info(:refresh_token, state = %State{stage: _}), do: {:noreply, state}
 
+  @impl GenServer
   def handle_cast(:refresh_token, state = %State{stage: :refreshing}),
     do: {:noreply, state |> refresh_token_impl()}
 
   def handle_cast(:refresh_token, state = %State{stage: _}), do: {:noreply, state}
 
-  defp fetch_token_impl(state = %State{}) do
+  defp fetch_token_impl(state = %State{ device_code_response: device_code_response}) do
     case RestClient.fetch_device_code_token(state) do
-      {:ok, token_response = %TokenResponse{}} ->
+      {:ok, token_response = %TokenResponse{ }} ->
         # token_response = token_response |> Map.put(:expires_in, 5)
 
         new_state =
@@ -149,7 +171,11 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
       {:error, _error_doc = %DeviceAuthenticatorError{}} ->
         self() |> Process.send_after(:poll_for_token, 1000 * state.device_code_response.interval)
 
+        #
+        # Each time we polled without success, decrement the :expires_in seconds
+        #
         state
+        |> Map.put(:device_code_response, device_code_response |> Map.put(:expires_in, device_code_response |> DeviceCodeResponse.expires_in()))
     end
   end
 
