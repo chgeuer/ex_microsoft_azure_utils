@@ -44,10 +44,12 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
     GenServer.start_link(__MODULE__, state, opts)
   end
 
+  @spec get_device_code(pid(), integer()) :: struct()
   def get_device_code(pid, timeout \\ :infinity) do
     pid |> GenServer.call(:get_device_code, timeout)
   end
 
+  @spec get_token(pid(), integer()) :: struct()
   def get_token(pid, timeout \\ :infinity) do
     pid |> GenServer.call(:get_token, timeout)
   end
