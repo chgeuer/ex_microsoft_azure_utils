@@ -1,4 +1,4 @@
-defmodule Microsoft.Azure.ActiveDirectory.Model.DeviceCodeResponse do
+defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.DeviceCodeResponse do
   #
   # Response from /tenant.onmicrosoft.com/oauth2/devicecode
   #

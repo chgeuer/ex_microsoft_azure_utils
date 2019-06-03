@@ -1,38 +1,16 @@
 defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   alias Microsoft.Azure.AzureEnvironment
   alias Microsoft.Azure.ActiveDirectory.{RestClient}
-  alias Microsoft.Azure.ActiveDirectory.Model.{DeviceCodeResponse, TokenResponse}
-  alias __MODULE__.State
+  alias __MODULE__.Model.{DeviceCodeResponse, TokenResponse, DeviceAuthenticatorState, DeviceAuthenticatorError}
 
   use GenServer
-
-  defmodule State do
-    # @derive {Inspect, except: [:device_code]}
-    @enforce_keys [:tenant_id, :azure_environment, :resource]
-    defstruct [
-      :tenant_id,
-      :azure_environment,
-      :resource,
-      :stage,
-      :device_code_response,
-      :token_response,
-      :refresh_timer
-    ]
-  end
-
-  defmodule DeviceAuthenticatorError do
-    defstruct [:correlation_id, :error, :error_codes, :error_description, :timestamp, :trace_id]
-
-    def from_json(str), do: str |> Poison.decode!(keys: :atoms, as: %__MODULE__{})
-  end
 
   #
   # Client section
   #
-
   def start_azure_management(tenant_id \\ "common", azure_environment \\ :azure_global),
     do:
-      %State{
+      %DeviceAuthenticatorState{
         tenant_id: tenant_id,
         azure_environment: azure_environment,
         resource:
@@ -40,7 +18,7 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
       }
       |> start()
 
-  def start(state = %State{}, opts \\ []) do
+  def start(state = %DeviceAuthenticatorState{}, opts \\ []) do
     GenServer.start_link(__MODULE__, state, opts)
   end
 
@@ -67,14 +45,14 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   #
 
   @impl GenServer
-  def init(state = %State{}) do
+  def init(state = %DeviceAuthenticatorState{}) do
     {:ok, state |> Map.put(:stage, :initialized)}
   end
 
   @impl GenServer
-  def handle_call(:get_stage, _, state = %State{stage: stage}), do: {:reply, stage, state}
+  def handle_call(:get_stage, _, state = %DeviceAuthenticatorState{stage: stage}), do: {:reply, stage, state}
 
-  def handle_call(:get_device_code, _, state = %State{stage: :initialized}) do
+  def handle_call(:get_device_code, _, state = %DeviceAuthenticatorState{stage: :initialized}) do
     #
     # Make the initial call to trigger device authentication
 
@@ -104,7 +82,7 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   def handle_call(
         :get_device_code,
         _sender,
-        state = %State{
+        state = %DeviceAuthenticatorState{
           stage: :polling,
           device_code_response: device_code_response = %{expires_on: expires_on}
         }
@@ -122,24 +100,24 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
     end
   end
 
-  def handle_call(:get_device_code, _, state = %State{stage: :refreshing}),
+  def handle_call(:get_device_code, _, state = %DeviceAuthenticatorState{stage: :refreshing}),
     do: {:reply, {:error, :token_already_issued}, state}
 
-  def handle_call(:get_token, _, state = %State{stage: :initialized}),
+  def handle_call(:get_token, _, state = %DeviceAuthenticatorState{stage: :initialized}),
     do: {:reply, {:error, :must_call_get_device_code}, state}
 
-  def handle_call(:get_token, _, state = %State{stage: :polling}),
+  def handle_call(:get_token, _, state = %DeviceAuthenticatorState{stage: :polling}),
     do: {:reply, {:error, :waiting_for_user_authentication}, state}
 
   def handle_call(
         :get_token,
         _,
-        state = %State{stage: :refreshing, token_response: token_response}
+        state = %DeviceAuthenticatorState{stage: :refreshing, token_response: token_response}
       ),
       do: {:reply, {:ok, token_response}, state}
 
   @impl GenServer
-  def handle_info(:poll_for_token, state = %State{device_code_response: device_code_response}) do
+  def handle_info(:poll_for_token, state = %DeviceAuthenticatorState{device_code_response: device_code_response}) do
     seconds_left = device_code_response |> DeviceCodeResponse.expires_in()
 
     cond do
@@ -149,18 +127,18 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
     end
   end
 
-  def handle_info(:refresh_token, state = %State{stage: :refreshing}),
+  def handle_info(:refresh_token, state = %DeviceAuthenticatorState{stage: :refreshing}),
     do: {:noreply, state |> refresh_token_impl()}
 
-  def handle_info(:refresh_token, state = %State{stage: _}), do: {:noreply, state}
+  def handle_info(:refresh_token, state = %DeviceAuthenticatorState{stage: _}), do: {:noreply, state}
 
   @impl GenServer
-  def handle_cast(:refresh_token, state = %State{stage: :refreshing}),
+  def handle_cast(:refresh_token, state = %DeviceAuthenticatorState{stage: :refreshing}),
     do: {:noreply, state |> refresh_token_impl()}
 
-  def handle_cast(:refresh_token, state = %State{stage: _}), do: {:noreply, state}
+  def handle_cast(:refresh_token, state = %DeviceAuthenticatorState{stage: _}), do: {:noreply, state}
 
-  defp fetch_token_impl(state = %State{device_code_response: device_code_response}) do
+  defp fetch_token_impl(state = %DeviceAuthenticatorState{device_code_response: device_code_response}) do
     case RestClient.fetch_device_code_token(state) do
       {:ok, token_response = %TokenResponse{}} ->
         # token_response = token_response |> Map.put(:expires_in, 5)
@@ -191,9 +169,9 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
     end
   end
 
-  defp refresh_token_impl(state = %State{}) do
+  defp refresh_token_impl(state = %DeviceAuthenticatorState{}) do
     case state do
-      %State{refresh_timer: refresh_timer} ->
+      %DeviceAuthenticatorState{refresh_timer: refresh_timer} ->
         refresh_timer |> Process.cancel_timer()
 
       _ ->

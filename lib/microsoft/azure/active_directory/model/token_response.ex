@@ -1,4 +1,4 @@
-defmodule Microsoft.Azure.ActiveDirectory.Model.TokenResponse do
+defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.TokenResponse do
   @derive {Inspect, except: [:access_token, :refresh_token, :id_token]}
 
   defstruct [
