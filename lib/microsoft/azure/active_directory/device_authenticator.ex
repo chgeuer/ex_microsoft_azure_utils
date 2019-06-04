@@ -15,34 +15,54 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   #
   # Client section
   #
-  def start_link(state = %State{supervisor_pid: pid}, opts \\ []) when is_pid(pid) do
+  def start_link(%State{supervisor_pid: pid} = state, opts \\ []) when is_pid(pid) do
     GenServer.start_link(__MODULE__, state, opts)
   end
 
   @spec get_device_code(pid(), integer()) :: struct()
   def get_device_code(pid, timeout \\ :infinity) do
     pid
-    |> DeviceAuthenticatorSupervisor.get_worker_pid()
+    |> get_worker_pid()
     |> GenServer.call(:get_device_code, timeout)
   end
 
   @spec get_token(pid(), integer()) :: struct()
   def get_token(pid, timeout \\ :infinity) do
     pid
-    |> DeviceAuthenticatorSupervisor.get_worker_pid()
+    |> get_worker_pid()
     |> GenServer.call(:get_token, timeout)
   end
 
   def force_refresh(pid) do
     pid
-    |> DeviceAuthenticatorSupervisor.get_worker_pid()
+    |> get_worker_pid()
     |> GenServer.cast(:refresh_token)
   end
 
   def get_stage(pid) do
     pid
-    |> DeviceAuthenticatorSupervisor.get_worker_pid()
+    |> get_worker_pid()
     |> GenServer.call(:get_stage)
+  end
+
+  def get_agent_pid(supervisor_pid),
+    do: supervisor_pid |> DeviceAuthenticatorSupervisor.get_child_pid(Agent)
+
+  def get_worker_pid(supervisor_pid),
+    do: supervisor_pid |> DeviceAuthenticatorSupervisor.get_child_pid(Worker)
+
+  def get_state(%{agent_pid: agent_pid}), do: Agent.get(agent_pid, & &1)
+
+  def get_state(%{supervisor_pid: supervisor_pid}),
+    do: get_state(%{agent_pid: get_agent_pid(supervisor_pid)})
+
+  def get_state(supervisor_pid) when is_pid(supervisor_pid),
+    do: get_state(%{supervisor_pid: supervisor_pid})
+
+  def set_state(%{agent_pid: agent_pid} = worker_state) do
+    Agent.update(agent_pid, fn _ -> worker_state end)
+
+    worker_state
   end
 
   #
@@ -63,23 +83,21 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
         :post_init,
         %State{supervisor_pid: supervisor_pid} = state
       ) do
-
-
     state_pid =
       supervisor_pid
-      |> DeviceAuthenticatorSupervisor.get_state_pid()
+      |> get_agent_pid()
 
     state =
       state
       |> Map.put(:state_pid, state_pid)
-      |> DeviceAuthenticatorSupervisor.get_agent_state()
+      |> get_state()
       |> Map.put(:state_pid, state_pid)
       |> Map.put(:supervisor_pid, supervisor_pid)
       |> set_default_if_nil(:stage, :initialized)
       |> reactivate_refresh_timers()
 
     state
-    |> DeviceAuthenticatorSupervisor.set_agent_state()
+    |> set_state()
 
     {:noreply, state}
   end
@@ -87,14 +105,20 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   defp set_default_if_nil(map, key, default_value) when is_map(map) do
     # If key is undefined, set it to the default value
     case map do
-      %{^key => nil} -> %{ map | key => default_value}
+      %{^key => nil} -> %{map | key => default_value}
       _ -> map
     end
   end
 
   defp reactivate_refresh_timers(%State{refresh_timer: nil} = state), do: state
 
-  defp reactivate_refresh_timers(%State{refresh_timer: refresh_timer, stage: :polling, device_code_response: %DeviceCodeResponse{interval: interval}} = state) do
+  defp reactivate_refresh_timers(
+         %State{
+           refresh_timer: refresh_timer,
+           stage: :polling,
+           device_code_response: %DeviceCodeResponse{interval: interval}
+         } = state
+       ) do
     refresh_timer |> Process.cancel_timer()
     timer = self() |> Process.send_after(:poll_for_token, 1000 * interval)
 
@@ -102,7 +126,13 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
     |> Map.put(:refresh_timer, timer)
   end
 
-  defp reactivate_refresh_timers(%State{refresh_timer: refresh_timer, stage: :refreshing, token_response: %TokenResponse{expires_on: expires_on}} = state) do
+  defp reactivate_refresh_timers(
+         %State{
+           refresh_timer: refresh_timer,
+           stage: :refreshing,
+           token_response: %TokenResponse{expires_on: expires_on}
+         } = state
+       ) do
     expires_in = expires_on |> Timex.diff(Timex.now(), :seconds)
     refresh_timer |> Process.cancel_timer()
     timer = self() |> Process.send_after(:refresh_token, 1000 * expires_in)
@@ -127,21 +157,26 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
     #
     # Make the initial call to trigger device authentication
     case RestClient.get_device_code(state) do
-      {:ok, device_code_response = %DeviceCodeResponse{expires_in: expires_in, interval: interval}} ->
+      {:ok,
+       device_code_response = %DeviceCodeResponse{expires_in: expires_in, interval: interval}} ->
         # remember when the code authN code expires
         expires_on = Timex.now() |> Timex.add(Timex.Duration.from_seconds(expires_in))
 
-        timer = self()
-        |> Process.send_after(:poll_for_token, 1000 * interval)
+        timer =
+          self()
+          |> Process.send_after(:poll_for_token, 1000 * interval)
 
         new_state =
           state
           |> Map.put(:stage, :polling)
-          |> Map.put(:device_code_response, device_code_response |> Map.put(:expires_on, expires_on))
+          |> Map.put(
+            :device_code_response,
+            device_code_response |> Map.put(:expires_on, expires_on)
+          )
           |> Map.put(:refresh_timer, timer)
 
         new_state
-        |> DeviceAuthenticatorSupervisor.set_agent_state()
+        |> set_state()
 
         {:reply, {:ok, new_state.device_code_response}, new_state}
 
@@ -155,7 +190,7 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
         _,
         state = %State{
           stage: :polling,
-          device_code_response: device_code_response = %{expires_on: expires_on}
+          device_code_response: %{expires_on: expires_on} = device_code_response
         }
       )
       when expires_on != nil do
@@ -166,7 +201,8 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
 
     cond do
       seconds_left > 0 -> {:reply, {:ok, device_code_response}, state}
-      # Process should exit if the current device code is expired
+
+      # if the current device code is expired, process should exit
       true -> {:stop, :normal, {:error, :cannot_use_expired_code_request}, state}
     end
   end
@@ -180,12 +216,10 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   def handle_call(:get_token, _, state = %State{stage: :polling}),
     do: {:reply, {:error, :waiting_for_user_authentication}, state}
 
-  def handle_call(
-        :get_token,
-        _,
-        state = %State{stage: :refreshing, token_response: token_response}
-      ),
-      do: {:reply, {:ok, token_response}, state}
+  def handle_call(:get_token, _, state = %State{stage: :refreshing, token_response: token_response}) do
+    # return the current token
+    {:reply, {:ok, token_response}, state}
+  end
 
   @impl GenServer
   def handle_info(
@@ -215,7 +249,7 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
   end
 
   def handle_cast(:refresh_token, state = %State{stage: _}) do
-     {:noreply, state}
+    {:noreply, state}
   end
 
   defp fetch_token_impl(%State{device_code_response: device_code_response} = state) do
@@ -233,7 +267,7 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
 
         new_state
         |> Map.put(:refresh_timer, timer)
-        |> DeviceAuthenticatorSupervisor.set_agent_state()
+        |> set_state()
 
       {:error, _error_doc = %DeviceAuthenticatorError{}} ->
         self() |> Process.send_after(:poll_for_token, 1000 * state.device_code_response.interval)
@@ -247,7 +281,7 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
           device_code_response
           |> Map.put(:expires_in, device_code_response |> DeviceCodeResponse.expires_in())
         )
-        |> DeviceAuthenticatorSupervisor.set_agent_state()
+        |> set_state()
     end
   end
 
@@ -279,7 +313,7 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
 
         new_state
         |> Map.put(:refresh_timer, timer)
-        |> DeviceAuthenticatorSupervisor.set_agent_state()
+        |> set_state()
 
       _ ->
         state

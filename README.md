@@ -34,7 +34,7 @@ aad_token_provider.(resource) |> JOSE.JWT.peek()
 aad_token_provider.(resource) |> JOSE.JWT.peek() |> Map.get(:fields) |> Enum.map( fn({k,v}) -> "#{k |> String.pad_trailing(12, " ")}: #{inspect(v)}" end) |> Enum.join("\n") |> IO.puts()
 aad_token_provider.(resource) |> JOSE.JWT.peek() |> Map.get(:fields) |> Map.get("iat")
 
-storage_pid |> DeviceAuthenticatorSupervisor.get_agent_state()
+storage_pid |> DeviceAuthenticatorSupervisor.get_state()
 
 storage_pid |> DeviceAuthenticatorSupervisor.get_worker_pid() |> Process.exit(:kill)
 ```
