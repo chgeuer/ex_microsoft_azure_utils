@@ -1,6 +1,12 @@
 defmodule Microsoft.Azure.ActiveDirectory.RestClient do
   alias Microsoft.Azure.AzureEnvironment
-  alias Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.{DeviceCodeResponse, TokenResponse, DeviceAuthenticatorError, DeviceAuthenticatorState}
+
+  alias Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.{
+    DeviceCodeResponse,
+    TokenResponse,
+    DeviceAuthenticatorError,
+    State
+  }
 
   use Tesla
   plug(Tesla.Middleware.FormUrlencoded)
@@ -155,7 +161,7 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
     end
   end
 
-  def get_device_code(%DeviceAuthenticatorState{
+  def get_device_code(%State{
         tenant_id: tenant_id,
         resource: resource,
         azure_environment: azure_environment
@@ -183,7 +189,7 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
     end
   end
 
-  def fetch_device_code_token(%DeviceAuthenticatorState{
+  def fetch_device_code_token(%State{
         resource: resource,
         azure_environment: azure_environment,
         device_code_response: %DeviceCodeResponse{device_code: device_code}
@@ -212,7 +218,7 @@ defmodule Microsoft.Azure.ActiveDirectory.RestClient do
     end
   end
 
-  def refresh_token(%DeviceAuthenticatorState{
+  def refresh_token(%State{
         resource: resource,
         azure_environment: azure_environment,
         token_response: %{refresh_token: refresh_token}

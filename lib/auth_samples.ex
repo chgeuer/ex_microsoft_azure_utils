@@ -9,7 +9,7 @@ defmodule Microsoft.Azure.ActiveDirectory.AuthSamples do
 
   def device_login() do
     {:ok, pid} =
-      DeviceAuthenticator.start(
+      DeviceAuthenticator.start_link(
         %{
           tenant_id: "common",
           resource: @azure_mgmt_endpoint,

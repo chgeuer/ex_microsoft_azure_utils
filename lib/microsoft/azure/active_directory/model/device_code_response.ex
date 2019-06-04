@@ -2,7 +2,6 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.DeviceCodeRe
   #
   # Response from /tenant.onmicrosoft.com/oauth2/devicecode
   #
-
   @derive {Inspect, except: [:device_code]}
 
   defstruct [
