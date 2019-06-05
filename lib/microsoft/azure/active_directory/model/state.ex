@@ -11,6 +11,6 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.State do
     :token_response,
     :refresh_timer,
     :supervisor_pid,
-    :state_pid
+    :agent_pid
   ]
 end

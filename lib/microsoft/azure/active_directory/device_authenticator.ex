@@ -49,7 +49,7 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
     do: supervisor_pid |> DeviceAuthenticatorSupervisor.get_child_pid(Agent)
 
   def get_worker_pid(supervisor_pid),
-    do: supervisor_pid |> DeviceAuthenticatorSupervisor.get_child_pid(Worker)
+    do: supervisor_pid |> DeviceAuthenticatorSupervisor.get_child_pid(__MODULE__)
 
   def get_state(%{agent_pid: agent_pid}), do: Agent.get(agent_pid, & &1)
 
@@ -83,15 +83,15 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator do
         :post_init,
         %State{supervisor_pid: supervisor_pid} = state
       ) do
-    state_pid =
+    agent_pid =
       supervisor_pid
       |> get_agent_pid()
 
     state =
       state
-      |> Map.put(:state_pid, state_pid)
+      |> Map.put(:agent_pid, agent_pid)
       |> get_state()
-      |> Map.put(:state_pid, state_pid)
+      |> Map.put(:agent_pid, agent_pid)
       |> Map.put(:supervisor_pid, supervisor_pid)
       |> set_default_if_nil(:stage, :initialized)
       |> reactivate_refresh_timers()
