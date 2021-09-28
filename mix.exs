@@ -26,7 +26,8 @@ defmodule ExMicrosoftAzureUtils.MixProject do
       {:tesla, "~> 0.8"},
       {:poison, ">= 1.0.0"},
       {:uuid, "~> 1.1"},
-      {:x509, "~> 0.1.1"}
+      {:x509, "~> 0.1.1"},
+      {:timex, "~> 3.7"}
     ]
   end
 end
