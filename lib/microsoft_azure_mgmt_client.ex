@@ -1,14 +1,4 @@
 defmodule MicrosoftAzureMgmtClient do
-  use Tesla
-
-  # adapter Tesla.Adapter.Ibrowse # https://github.com/teamon/tesla/wiki/0.x-to-1.0-Migration-Guide#dropped-aliases-support-159
-  adapter(:ibrowse)
-
-  # plug Tesla.Middleware.BaseUrl, "https://management.azure.com"
-  # plug(Tesla.Middleware.Headers, [{"User-Agent", "Elixir"}])
-  plug(Tesla.Middleware.EncodeJson)
-  plug(Tesla.Middleware.JSON)
-
   @scopes [
     # impersonate your user account
     "user_impersonation"
@@ -25,33 +15,28 @@ defmodule MicrosoftAzureMgmtClient do
   end
 
   defp new(base_url, token) when is_binary(token) do
-    Tesla.build_client([
-      Tesla.Middleware.KeepRequest,
-      {Tesla.Middleware.BaseUrl, base_url},
-      # https://github.com/teamon/tesla/wiki/0.x-to-1.0-Migration-Guide#headers-are-now-a-list-160
-      {Tesla.Middleware.Headers, %{"Authorization" => "Bearer #{token}"}},
-      Tesla.Middleware.EncodeJson,
-      Tesla.Middleware.JSON,
-      proxy_middleware()
-    ])
+    options = [
+      base_url: base_url,
+      auth: {:bearer, token},
+      headers: [{"user-agent", "Elixir"}]
+    ]
+
+    options =
+      case proxy_config() do
+        nil -> options
+        proxy -> Keyword.put(options, :connect_options, proxy)
+      end
+
+    Req.new(options)
   end
 
-  def proxy_middleware() do
+  defp proxy_config do
     case System.get_env("http_proxy") do
-      nil ->
-        nil
-
-      "" ->
-        nil
-
+      nil -> nil
+      "" -> nil
       proxy_cfg ->
-        [host, port] = proxy_cfg |> String.split(":")
-
-        {Tesla.Middleware.Opts,
-         [
-           proxy_host: host |> String.to_charlist(),
-           proxy_port: port |> Integer.parse() |> elem(0)
-         ]}
+        [host, port] = String.split(proxy_cfg, ":")
+        [proxy: {String.to_charlist(host), String.to_integer(port)}]
     end
   end
 end

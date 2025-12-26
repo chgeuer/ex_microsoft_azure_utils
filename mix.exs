@@ -21,12 +21,11 @@ defmodule ExMicrosoftAzureUtils.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ibrowse, "~> 4.4"},
-      {:joken, "~> 1.5"},
-      {:tesla, "~> 0.8"},
-      {:poison, ">= 1.0.0"},
+      {:req, "~> 0.5"},
+      {:joken, "~> 2.0"},
+      {:jason, "~> 1.4"},
       {:uuid, "~> 1.1"},
-      {:x509, "~> 0.1.1"},
+      {:x509, "~> 0.9"},
       {:timex, "~> 3.7"}
     ]
   end

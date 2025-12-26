@@ -15,12 +15,26 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.TokenRespons
     :foci
   ]
 
-  def from_json(json) do
-    json
-    |> Poison.decode!(as: %__MODULE__{})
-    |> Map.update!(:not_before, &(&1 |> String.to_integer() |> DateTime.from_unix!()))
-    |> Map.update!(:expires_on, &(&1 |> String.to_integer() |> DateTime.from_unix!()))
-    |> Map.update!(:expires_in, &String.to_integer/1)
-    |> Map.update!(:ext_expires_in, &String.to_integer/1)
+  def from_json(json) when is_binary(json),
+    do: json |> Jason.decode!(keys: :atoms) |> from_json()
+
+  def from_json(map) when is_map(map) do
+    struct(__MODULE__, map)
+    |> Map.update!(:not_before, fn
+      val when is_binary(val) -> val |> String.to_integer() |> DateTime.from_unix!()
+      val when is_integer(val) -> DateTime.from_unix!(val)
+    end)
+    |> Map.update!(:expires_on, fn
+      val when is_binary(val) -> val |> String.to_integer() |> DateTime.from_unix!()
+      val when is_integer(val) -> DateTime.from_unix!(val)
+    end)
+    |> Map.update!(:expires_in, fn
+      val when is_binary(val) -> String.to_integer(val)
+      val when is_integer(val) -> val
+    end)
+    |> Map.update!(:ext_expires_in, fn
+      val when is_binary(val) -> String.to_integer(val)
+      val when is_integer(val) -> val
+    end)
   end
 end

@@ -8,8 +8,10 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.DeviceAuthen
     :trace_id
   ]
 
-  def from_json(str),
-    do:
-      str
-      |> Poison.decode!(keys: :atoms, as: %__MODULE__{})
+  def from_json(str) when is_binary(str),
+    do: str |> Jason.decode!(keys: :atoms) |> from_json()
+
+  def from_json(map) when is_map(map) do
+    struct(__MODULE__, map)
+  end
 end

@@ -18,10 +18,18 @@ defmodule Microsoft.Azure.ActiveDirectory.DeviceAuthenticator.Model.DeviceCodeRe
   def expires_in(%__MODULE__{expires_on: expires_on}),
     do: expires_on |> Timex.diff(Timex.now(), :seconds)
 
-  def from_json(json) do
-    json
-    |> Poison.decode!(as: %__MODULE__{})
-    |> Map.update!(:expires_in, &String.to_integer/1)
-    |> Map.update!(:interval, &String.to_integer/1)
+  def from_json(json) when is_binary(json),
+    do: json |> Jason.decode!(keys: :atoms) |> from_json()
+
+  def from_json(map) when is_map(map) do
+    struct(__MODULE__, map)
+    |> Map.update!(:expires_in, fn
+      val when is_binary(val) -> String.to_integer(val)
+      val when is_integer(val) -> val
+    end)
+    |> Map.update!(:interval, fn
+      val when is_binary(val) -> String.to_integer(val)
+      val when is_integer(val) -> val
+    end)
   end
 end
